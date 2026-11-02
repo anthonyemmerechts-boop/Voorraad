@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="nl-BE"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#383E42"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon-192.png">
+<title>Ve.Ra+ Voorraad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+html{-webkit-text-size-adjust:100%}
+/* Layout: a magazine counter. Anthracite header holds the stock value, shelf rows below, thumb navigation at the bottom. */
+:root{
+  --bg:#EEF0F1; --surface:#FFFFFF; --line:#D5DADD; --fg:#20272B; --muted:#5D6A71;
+  --ral:#383E42; --on-ral:#F4F6F7; --on-ral-muted:#B5BEC3;
+  --accent:#0B6B73; --accent-soft:#D8ECEE; --on-accent:#FFFFFF;
+  --warn:#9A5A00; --warn-soft:#FBEBCB; --bad:#AD2B22; --bad-soft:#F9DEDB; --good:#1F7A4D;
+  --display:"Barlow Semi Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Barlow",Arial,sans-serif;
+  --mono:"IBM Plex Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#171B1D; --surface:#22282B; --line:#3A4348; --fg:#E9EDEF; --muted:#A3AFB5;
+  --ral:#2B3134; --on-ral:#F4F6F7; --on-ral-muted:#AEB8BD;
+  --accent:#5CC3CC; --accent-soft:#16383C; --on-accent:#08292C;
+  --warn:#F0B95B; --warn-soft:#40300F; --bad:#F2928A; --bad-soft:#47201D; --good:#6BCB97;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#171B1D; --surface:#22282B; --line:#3A4348; --fg:#E9EDEF; --muted:#A3AFB5;
+  --ral:#2B3134; --on-ral:#F4F6F7; --on-ral-muted:#AEB8BD;
+  --accent:#5CC3CC; --accent-soft:#16383C; --on-accent:#08292C;
+  --warn:#F0B95B; --warn-soft:#40300F; --bad:#F2928A; --bad-soft:#47201D; --good:#6BCB97;
+  color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--fg);font:400 16px/1.4 var(--body);padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--ral)}
+.wrap{max-width:760px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{background:var(--ral);color:var(--on-ral)}
+header .wrap{padding-block:14px 16px;display:grid;gap:2px}
+.brand{font:600 15px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--on-ral-muted)}
+.total{font:700 clamp(38px,11vw,52px)/1.05 var(--display);font-variant-numeric:tabular-nums}
+.sub{font-size:14px;color:var(--on-ral-muted)}
+.sub b{color:var(--on-ral);font-weight:600}
+main{padding-block:16px 76px;display:grid;gap:14px}
+h2{font:700 21px var(--display);margin:0;text-wrap:balance}
+h3{font:600 17px var(--display);margin:0}
+.muted{color:var(--muted)} .small{font-size:14px}
+button,input,select,textarea{font:inherit;color:inherit}
+input,select,textarea{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+label{display:grid;gap:4px;font-size:14px;font-weight:600}
+label.chk{display:flex;align-items:center;gap:10px;font-weight:500}
+label.chk input{width:22px;min-height:22px;height:22px}
+.btn{min-height:48px;padding:10px 16px;border-radius:6px;border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.bad{color:var(--bad);border-color:var(--bad)}
+.btn[disabled]{opacity:.5;cursor:default}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row>*{min-width:0}
+.grow{flex:1 1 150px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:end}
+.notice{padding:10px 12px;border-radius:6px;background:var(--warn-soft);color:var(--fg);font-size:14px}
+.notice.err{background:var(--bad-soft)}
+.shelf{display:grid;background:var(--surface);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:12px;border:0;border-top:1px solid var(--line);background:none;text-align:left;width:100%;cursor:pointer}
+.item:first-child{border-top:0}
+.name{font-weight:600;overflow-wrap:anywhere}
+.qty{font:500 18px var(--mono);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.meta{font-size:14px;color:var(--muted);overflow-wrap:anywhere}
+.val{font:400 14px var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
+.chip{display:inline-block;padding:0 7px;border-radius:4px;font-size:13px;font-weight:600;background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.ex{background:var(--accent-soft);color:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px;min-width:0}
+.tile b{display:block;font:600 22px var(--mono);overflow-wrap:anywhere}
+.empty{padding:22px 16px;text-align:center;background:var(--surface);border:1px dashed var(--line);border-radius:6px;display:grid;gap:10px;justify-items:center}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-weight:600;color:var(--muted)}
+th,td{padding:8px 6px;border-top:1px solid var(--line);vertical-align:top}
+td.n,th.n{text-align:right;font-family:var(--mono);white-space:nowrap}
+.scroll{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+nav div{max-width:760px;margin:0 auto;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+nav button{min-height:64px;padding:0 1px;border:0;background:none;font-weight:600;font-size:13px;color:var(--muted);cursor:pointer;border-top:3px solid transparent}
+nav button[aria-current="page"]{color:var(--accent);border-top-color:var(--accent)}
+nav .scan{color:var(--accent)}
+#sheet{position:fixed;inset:0;z-index:30;background:rgba(10,14,16,.55);display:flex;align-items:flex-end;justify-content:center}
+#sheetBox{background:var(--bg);width:100%;max-width:640px;max-height:92%;overflow:auto;border-radius:12px 12px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;gap:12px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{min-height:46px;border:0;background:var(--surface);font-weight:600;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+#cartBar{position:fixed;left:0;right:0;bottom:calc(67px + env(safe-area-inset-bottom,0px));z-index:21;background:var(--accent-soft);border-top:1px solid var(--line);padding-block:8px}
+.link{border:0;background:none;color:var(--accent);font-weight:600;padding:4px 0;cursor:pointer;text-decoration:underline}
+.thumb{width:32px;height:32px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:8px}
+.big{width:100%;max-height:220px;object-fit:contain;border-radius:6px;background:var(--surface)}
+.seg{grid-template-columns:repeat(auto-fit,minmax(88px,1fr))!important}
+#login{position:fixed;inset:0;z-index:50;background:var(--bg);display:grid;place-items:center;overflow:auto}
+#offline{background:var(--warn-soft);color:var(--fg);font-size:14px;padding:6px 16px;text-align:center}
+#live{position:fixed;inset:0;z-index:45;background:#000;display:grid;grid-template-rows:1fr auto}
+#live video{width:100%;height:100%;object-fit:cover;min-height:0}
+#live div{padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:var(--surface)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--ral);color:var(--on-ral);padding:10px 14px;border-radius:6px;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion:no-preference){.item:hover{background:var(--accent-soft)}}
+</style>
+
+</head><body>
+<div id="offline" hidden></div>
+<header><div class="wrap">
+  <div class="brand">Ve.Ra+ Voorraad</div>
+  <div class="total" id="total">€ 0,00</div>
+  <div class="sub" id="subline">Stockwaarde wordt geladen</div>
+</div></header>
+<main class="wrap" id="view"></main>
+<nav aria-label="Hoofdmenu"><div>
+  <button id="nav-stock" data-v="stock">Stock</button>
+  <button id="nav-scan" class="scan" data-v="scan">Scan</button>
+  <button id="nav-bestellen" data-v="bestellen">Bestellen</button>
+  <button id="nav-tellen" data-v="tellen">Tellen</button>
+  <button id="nav-waarde" data-v="waarde">Waarde</button>
+  <button id="nav-meer" data-v="meer">Meer</button>
+</div></nav>
+<div id="cartBar" hidden><div class="wrap row"><span id="cartTxt" class="grow"></span><button class="btn primary" id="cartBtn">Bekijken en boeken</button></div></div>
+<div id="sheet" hidden><div id="sheetBox" role="dialog" aria-modal="true"></div></div>
+<div id="login" hidden></div>
+<div id="live" hidden><video id="cam" playsinline muted></video><div class="row"><span class="grow small">Richt de camera op het label</span><button class="btn" id="liveStop">Stoppen</button></div></div>
+<div id="toast" role="status" hidden></div>
+<input id="photo" type="file" accept="image/*" capture="environment" hidden>
+
+<script id="core">
+/* Pure stock logic: every quantity and value is replayed from the movements, so nobody overwrites anybody. */
+const Stock={
+  MAG:"magazijn",
+  replay(movements,until){
+    const list=[...movements].filter(m=>!until||m.at<=until)
+      .sort((a,b)=>a.at<b.at?-1:a.at>b.at?1:(a.id<b.id?-1:1));
+    const undone=new Set(list.filter(m=>m.type==="storno").map(m=>m.herstelt));
+    const s={},cost={},diff={};
+    const get=id=>s[id]||(s[id]={qty:0,avg:0,last:0,pl:{},lastIn:"",lastOut:"",lastCount:"",melding:""});
+    for(const m of list){
+      if(m.type==="storno"||undone.has(m.id))continue;
+      const p=get(m.productId),q=Number(m.qty)||0;
+      if(m.type==="melding"){p.melding=m.at;continue}
+      if(m.type==="in"){
+        const price=m.price==null||m.price===""?p.avg:Number(m.price)||0;
+        const base=Math.max(p.qty,0);
+        p.avg=base+q>0?(base*p.avg+q*price)/(base+q):p.avg;
+        p.qty+=q;p.last=price;p.lastIn=m.at;
+        const pl=m.plaats||Stock.MAG;p.pl[pl]=(p.pl[pl]||0)+q;
+      }else if(m.type==="uit"){
+        const pl=m.van||Stock.MAG;p.pl[pl]=(p.pl[pl]||0)-q;p.qty-=q;cost[m.id]=q*p.avg;p.lastOut=m.at;
+      }else if(m.type==="retour"){
+        const pl=m.plaats||Stock.MAG;p.pl[pl]=(p.pl[pl]||0)+q;p.qty+=q;cost[m.id]=-q*p.avg;
+      }else if(m.type==="verplaats"){
+        p.pl[m.van]=(p.pl[m.van]||0)-q;p.pl[m.naar]=(p.pl[m.naar]||0)+q;
+      }else if(m.type==="telling"){
+        const pl=m.plaats||Stock.MAG,d=q-(p.pl[pl]||0);
+        p.pl[pl]=q;p.qty+=d;p.lastCount=m.at;diff[m.id]=d*p.avg;
+      }
+    }
+    return {stock:s,cost,diff,undone};
+  },
+  value(e){return e?Math.max(e.qty,0)*e.avg:0},
+  /* net use per product in the last `days` days, undone bookings excluded */
+  verbruik(movements,nowIso,days){
+    const from=new Date(new Date(nowIso).getTime()-days*864e5).toISOString();
+    const undone=new Set(movements.filter(m=>m.type==="storno").map(m=>m.herstelt)),o={};
+    for(const m of movements){
+      if(m.at<from||undone.has(m.id))continue;
+      if(m.type==="uit")o[m.productId]=(o[m.productId]||0)+Number(m.qty);
+      if(m.type==="retour")o[m.productId]=(o[m.productId]||0)-Number(m.qty);
+    }
+    return o;
+  },
+  minimumVoorstel(verbruik90,levertijd){
+    if(!(verbruik90>0))return 0;
+    return Math.ceil(verbruik90/90*(Number(levertijd)||7)*1.5);
+  },
+  telKeuze(products,stock,nowIso,n){
+    const iv={A:30,B:60,C:120},now=new Date(nowIso).getTime();
+    return products.map(p=>{const l=stock[p.id]?.lastCount,d=l?(now-new Date(l).getTime())/864e5:9999;return {p,score:d/(iv[p.klasse||"B"]||60)}})
+      .sort((a,b)=>b.score-a.score||a.p.naam.localeCompare(b.p.naam,"nl")).slice(0,n).map(x=>x.p);
+  },
+  fnv(s){let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return (h>>>0).toString(36)}
+};
+</script>
+
+<script>
+/* Koppeling tussen de app en Supabase. De app zelf praat met een eenvoudige databank-laag. */
+const SB_URL="https://yoimyxwrdjcwifjtxqrz.supabase.co",SB_KEY="sb_publishable_8hbbb1kJyEzFKTjLp-D73g_XlRMXsqF",DOMEIN="plaatser.example.com";
+const sb=supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
+const TABELLEN=["products","movements","prijzen","ploegen","pakketten","werven"];
+const lees=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
+const schrijf=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+const netFout=e=>!navigator.onLine||/fetch|network/i.test(e?.message||"");
+const Laag={
+  rij:{},subs:{},wacht:lees("vr-wacht",[]),
+  bewaar(t){schrijf("vr-t-"+t,Laag.rij[t])},
+  meld(t){const docs=Object.entries(Laag.rij[t]||{}).map(([id,d])=>({id,data:()=>d}));(Laag.subs[t]||[]).forEach(f=>f({docs}))},
+  async haal(t){
+    const o={};let v=0;
+    for(;;){
+      const {data,error}=await sb.from(t).select("id,data").order("id").range(v,v+999);
+      if(error)throw error;
+      data.forEach(r=>o[r.id]=r.data);
+      if(data.length<1000)break;v+=1000;
+    }
+    Laag.wacht.filter(w=>w.t===t&&w.op==="set").forEach(w=>o[w.id]=w.d);
+    Laag.rij[t]=o;Laag.bewaar(t);Laag.meld(t);
+  },
+  async stuur(w){
+    let r;
+    if(w.op==="set"&&w.t==="movements"){r=await sb.from(w.t).insert({id:w.id,data:w.d});if(r.error?.code==="23505")return}
+    else if(w.op==="set")r=await sb.from(w.t).upsert({id:w.id,data:w.d});
+    else if(w.op==="update"){const n={...(Laag.rij[w.t]?.[w.id]||{}),...w.d};r=await sb.from(w.t).update({data:n}).eq("id",w.id)}
+    else r=await sb.from(w.t).delete().eq("id",w.id);
+    if(r.error)throw r.error;
+  },
+  async spoel(){
+    while(Laag.wacht.length){
+      try{await Laag.stuur(Laag.wacht[0])}catch(e){if(netFout(e))return;Laag.fout=true}
+      Laag.wacht.shift();schrijf("vr-wacht",Laag.wacht);
+    }
+    Laag.status();
+  },
+  status(){const e=document.getElementById("offline");if(!e)return;const n=Laag.wacht.length;e.hidden=navigator.onLine&&!n;e.textContent=navigator.onLine?`${n} boeking(en) worden verstuurd`:`Geen verbinding. ${n?n+" boeking(en) wachten op verzending.":"Je ziet de laatst geladen stock."}`},
+  async schrijfOp(w){
+    const t=w.t,o=Laag.rij[t]=Laag.rij[t]||{};
+    if(w.op==="set")o[w.id]=w.d;else if(w.op==="update")o[w.id]={...(o[w.id]||{}),...w.d};else delete o[w.id];
+    Laag.bewaar(t);Laag.meld(t);
+    try{
+      if(!navigator.onLine)throw new Error("network");
+      if(w.op==="update")w={op:"set",t,id:w.id,d:o[w.id]};
+      await Laag.stuur(w);
+    }catch(e){
+      if(netFout(e)&&["movements","prijzen"].includes(t)){Laag.wacht.push(w.op==="update"?{op:"set",t,id:w.id,d:o[w.id]}:w);schrijf("vr-wacht",Laag.wacht);Laag.status();return}
+      await Laag.haal(t).catch(()=>{});
+      throw {code:e?.code==="42501"?"invalid_argument":"unavailable",message:e?.message};
+    }
+  }
+};
+const docRef=(t,id)=>({id,
+  set:d=>Laag.schrijfOp({op:"set",t,id,d}),
+  update:d=>Laag.schrijfOp({op:"update",t,id,d}),
+  delete:()=>Laag.schrijfOp({op:"delete",t,id})});
+const dbLaag={
+  doc:p=>{const [t,id]=p.split("/");return docRef(t,id)},
+  collection:t=>({
+    doc:(id)=>docRef(t,id||crypto.randomUUID()),
+    onSnapshot(next,fail){
+      (Laag.subs[t]=Laag.subs[t]||[]).push(next);
+      Laag.rij[t]=lees("vr-t-"+t,{});Laag.meld(t);
+      Laag.haal(t).catch(e=>{if(!netFout(e)&&fail)fail(e)});
+      sb.channel("v-"+t).on("postgres_changes",{event:"*",schema:"public",table:t},()=>{clearTimeout(Laag["x"+t]);Laag["x"+t]=setTimeout(()=>Laag.haal(t).catch(()=>{}),300)}).subscribe();
+      return ()=>{};
+    }})
+};
+let klaar;const aangemeld=new Promise(r=>klaar=r);let profiel=null;
+const fn=async(body)=>{const {data,error}=await sb.functions.invoke("gebruikers",{body});if(error){let m="";try{m=(await error.context.json()).fout}catch{}throw new Error(m||"Dat is niet gelukt.")}return data};
+async function laadProfiel(u){
+  const c=lees("vr-prof-"+u.id,null);
+  const {data,error}=await sb.from("profielen").select("user_id,naam,rol,actief").eq("user_id",u.id).maybeSingle();
+  if(error&&!netFout(error))throw error;
+  const p=data||(netFout(error)?c:null);
+  if(p)schrijf("vr-prof-"+u.id,p);
+  return p;
+}
+function toonLogin(fout,eerste){
+  const b=document.getElementById("login");b.hidden=false;
+  b.innerHTML=`<form id="lf" class="wrap" style="max-width:420px;display:grid;gap:12px" novalidate><div class="brand" style="color:var(--muted)">Ve.Ra+ Voorraad</div><h2>${eerste?"Maak het beheerdersaccount":"Aanmelden"}</h2>
+  ${eerste?`<label>E-mailadres<input id="l-n" type="email" autocomplete="username"></label><label>Kies een wachtwoord (minstens 10 tekens)<input id="l-w" type="password" autocomplete="new-password"></label>`:`<label>Naam of e-mailadres<input id="l-n" autocomplete="username"></label><label>Code of wachtwoord<input id="l-w" type="password" autocomplete="current-password"></label>`}
+  <div class="notice err" ${fout?"":"hidden"}>${esc(fout||"")}</div><button class="btn primary">${eerste?"Account aanmaken":"Aanmelden"}</button></form>`;
+  document.getElementById("lf").onsubmit=async e=>{e.preventDefault();
+    const n=document.getElementById("l-n").value.trim(),w=document.getElementById("l-w").value,bt=e.target.querySelector("button");bt.disabled=true;
+    try{
+      if(eerste){await fn({actie:"eerste_beheerder",email:n,wachtwoord:w});}
+      const email=n.includes("@")?n:slug(n)+"@"+DOMEIN;
+      const {error}=await sb.auth.signInWithPassword({email,password:w});
+      if(error)throw new Error("Naam of code klopt niet.");
+    }catch(x){toonLogin(x.message,eerste)}
+  };
+}
+const slug=s=>s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,".").replace(/^\.|\.$/g,"");
+async function start(u){
+  try{
+    profiel=await laadProfiel(u);
+    if(!profiel||!profiel.actief){await sb.auth.signOut();toonLogin("Dit account heeft geen toegang. Vraag het aan Anthony.");return}
+    document.getElementById("login").hidden=true;klaar();
+  }catch{toonLogin("Aanmelden is niet gelukt. Probeer opnieuw.")}
+}
+let gestart=false;
+addEventListener("DOMContentLoaded",()=>{
+sb.auth.onAuthStateChange((ev,s)=>{if(s?.user&&!gestart){gestart=true;setTimeout(()=>start(s.user).then(()=>{if(document.getElementById("login").hidden===false)gestart=false}),0)}});
+(async()=>{
+  const {data:{session}}=await sb.auth.getSession();
+  if(session?.user)return;
+  let eerste=false;try{eerste=(await fn({actie:"status"})).leeg}catch{}
+  toonLogin("",eerste);
+})();
+});
+window.addEventListener("online",()=>{Laag.spoel();TABELLEN.forEach(t=>Laag.rij[t]&&Laag.subs[t]&&Laag.haal(t).catch(()=>{}));Laag.status()});
+window.addEventListener("offline",()=>Laag.status());
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&navigator.onLine){Laag.spoel();Object.keys(Laag.subs).forEach(t=>Laag.haal(t).catch(()=>{}))}});
+const gebruikerLaag={
+  id:async()=>(await sb.auth.getSession()).data.session?.user.id||Object.keys(localStorage).find(k=>k.startsWith("vr-prof-"))?.slice(8)||null,
+  canEdit:async()=>profiel?.rol==="beheerder",
+  profiles:async ids=>{const {data}=await sb.from("profielen").select("user_id,naam").in("user_id",ids);const o={};(data||[]).forEach(r=>o[r.user_id]={name:r.naam});return o}
+};
+const downloadsLaag={save:async({filename,data})=>{const b=data instanceof Blob?data:new Blob([data]),u=URL.createObjectURL(b),a=document.createElement("a");a.href=u;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000);return{status:"saved"}}};
+const assetsLaag={upload:async b=>{const id=crypto.randomUUID()+".jpg",{error}=await sb.storage.from("fotos").upload(id,b,{contentType:"image/jpeg"});if(error)throw error;return{id}}};
+window.fotoUrl=id=>`${SB_URL}/storage/v1/object/public/fotos/${encodeURIComponent(id)}`;
+window.claude={use:async n=>{await aangemeld;Laag.spoel();Laag.status();return {db:dbLaag,user:gebruikerLaag,downloads:downloadsLaag,assets:profiel.rol==="beheerder"?assetsLaag:null}[n]||null}};
+window.Beheer={fn,afmelden:async()=>{await sb.auth.signOut();try{Object.keys(localStorage).filter(k=>k.startsWith("vr-t-")||k.startsWith("vr-prof-")).forEach(k=>localStorage.removeItem(k))}catch{}location.reload()},lijst:async()=>{const {data}=await sb.from("profielen").select("user_id,naam,rol,actief").order("naam");return data||[]},eigen:()=>profiel};
+</script>
+<script>
+const APP_URL="https://anthonyemmerechts-boop.github.io/Voorraad/";
+const CATS=["Verbruiksmateriaal","Afwerkingsmateriaal"];
+const UNITS=["stuk","doos","koker","rol","lm","m²","zak","pak"];
+const KLASSE={A:"A: duur, per stuk boeken",B:"B: gewoon, per verpakking boeken",C:"C: klein materiaal, niet boeken"};
+const REDENEN=["Telfout vorige keer","Niet geboekt","Breuk","Vervallen","Verloren of zoek","Andere"];
+const TYPE={in:"In",uit:"Uit",retour:"Retour",telling:"Telling",verplaats:"Verplaatsen",melding:"Bijna op gemeld",storno:"Ongedaan gemaakt"};
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const eur=n=>"€ "+Number(n||0).toLocaleString("nl-BE",{minimumFractionDigits:2,maximumFractionDigits:2});
+const num=n=>Number(n||0).toLocaleString("nl-BE",{maximumFractionDigits:3});
+const dec=v=>{const n=parseFloat(String(v??"").trim().replace(",","."));return Number.isFinite(n)?n:NaN};
+const newId=p=>p+Array.from(crypto.getRandomValues(new Uint8Array(8)),b=>(b%36).toString(36)).join("");
+const fmtDate=s=>new Date(s).toLocaleDateString("nl-BE",{day:"2-digit",month:"2-digit",year:"numeric"});
+const nowIso=()=>new Date().toISOString();
+
+const state={db:null,user:null,downloads:null,assets:null,uid:null,products:[],movements:[],ploegen:[],pakketten:[],werven:[],prijzen:{},
+  isAdmin:false,preview:false,orderQty:{},loaded:{p:false,m:false},problem:"",view:"stock",q:"",cat:"",low:false,pick:new Set(),badgePick:new Set(),asOf:"",
+  cart:[],mand:{},telset:null,telPlaats:Stock.MAG,telRek:"",openId:null};
+let cur={stock:{},cost:{},diff:{},undone:new Set()},verbruik={};
+const beheer=()=>state.isAdmin&&!state.preview;
+const metPrijs=()=>state.movements.map(m=>state.prijzen[m.id]!=null?{...m,price:state.prijzen[m.id]}:m);
+const active=()=>state.products.filter(p=>!p.archived);
+const byName=(a,b)=>a.naam.localeCompare(b.naam,"nl");
+const plaatsen=()=>[{id:Stock.MAG,naam:"Magazijn"},...[...state.ploegen].sort(byName).map(t=>({id:t.id,naam:"Wagen "+t.naam}))];
+const plaatsNaam=id=>plaatsen().find(x=>x.id===id)?.naam||"Oude plaats";
+const op=id=>cur.stock[id]||{qty:0,avg:0,last:0,pl:{}};
+const opPlaats=(id,pl)=>op(id).pl[pl]||0;
+const geboekt=(p)=>p.klasse==="C";
+function gemeld(p){const s=op(p.id);return !!s.melding&&s.melding>(s.lastIn||"")}
+function isLow(p){const m=Number(p.minimum)||0;return (m>0&&op(p.id).qty<m)||gemeld(p)}
+function toast(t){const e=$("#toast");e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>e.hidden=true,3200)}
+function geheugen(){try{return JSON.parse(localStorage.getItem("vr-ploeg")||"{}")}catch{return {}}}
+function onthoud(v){try{localStorage.setItem("vr-ploeg",JSON.stringify(v))}catch{}}
+function writeError(e){
+  if(e?.code==="invalid_argument")return "Je hebt geen toestemming voor deze wijziging. Vraag toegang aan Anthony.";
+  if(e?.code==="quota_exceeded")return "De opslag is vol. Vraag Anthony om oude gegevens op te ruimen.";
+  return "Opslaan is niet gelukt. Controleer je verbinding en probeer opnieuw.";
+}
+function renderHead(){
+  const prods=active(),tot=prods.reduce((a,p)=>a+Stock.value(op(p.id)),0),low=prods.filter(p=>isLow(p)&&!p.besteldOp).length;
+  $$("nav button").forEach(b=>{b.hidden=!beheer()&&!["stock","scan"].includes(b.dataset.v);b.dataset.v===state.view?b.setAttribute("aria-current","page"):b.removeAttribute("aria-current")});
+  $("#total").textContent=beheer()?eur(tot):`${prods.length} ${prods.length===1?"artikel":"artikels"}`;
+  const b=geheugen();
+  $("#subline").innerHTML=!state.loaded.p?(state.problem?esc(state.problem):"Stock wordt geladen"):beheer()?`<b>${prods.length}</b> ${prods.length===1?"artikel":"artikels"} · <b>${low}</b> bij te bestellen`:(b.badge?`Je boekt als <b>${esc(b.persoon)}</b>`:"Scan een label om materiaal uit te boeken");
+  const bar=$("#cartBar"),n=state.cart.length;bar.hidden=!n||!$("#sheet").hidden;
+  if(n)$("#cartTxt").textContent=`Mandje: ${n} ${n===1?"artikel":"artikels"}`;
+}
+function render(){
+  if(!beheer()&&!["stock","scan"].includes(state.view))state.view="stock";
+  const mv=metPrijs();cur=Stock.replay(mv);verbruik=Stock.verbruik(state.movements,nowIso(),90);
+  renderHead();
+  ({stock:viewStock,scan:viewScan,bestellen:viewBestellen,tellen:viewTellen,waarde:viewWaarde,meer:viewMeer}[state.view])();
+}
+function examplesBanner(){
+  if(!beheer()||!state.products.some(p=>p.voorbeeld))return "";
+  return `<div class="notice row"><span class="grow">Dit zijn voorbeeldartikels om de app te proberen, geen echte stock.</span><button class="btn" id="clearEx">Voorbeelden wissen</button></div>`;
+}
+function bindExamples(){const b=$("#clearEx");if(b)b.onclick=clearExamples}
+function foto(p,cls){return p.fotoId?`<img class="${cls}" src="${esc(fotoUrl(p.fotoId))}" alt="">`:""}
+
+/* ---------- Stock ---------- */
+function viewStock(){
+  const v=$("#view"),prods=active().sort(byName),q=state.q.toLowerCase();
+  if(!state.loaded.p){v.innerHTML=`<div class="empty"><h2>Stock laden</h2><p class="muted small">${esc(state.problem||"Je artikels verschijnen hier zodra de gegevens binnen zijn.")}</p></div>`;return}
+  const list=prods.filter(p=>(!state.cat||p.categorie===state.cat)&&(!state.low||isLow(p))&&(!q||[p.naam,p.artikelnr,p.locatie,p.leverancier].join(" ").toLowerCase().includes(q)));
+  v.innerHTML=`${state.preview?`<div class="notice row"><span class="grow">Je bekijkt het scherm van een plaatser.</span><button class="btn" id="endPreview">Terug naar beheer</button></div>`:""}${examplesBanner()}
+  <div class="row"><input id="search" class="grow" type="search" placeholder="Zoek op naam, artikelnr of rek" aria-label="Zoeken" value="${esc(state.q)}">${beheer()?`<button class="btn primary" id="add">Nieuw artikel</button>`:""}</div>
+  <div class="row"><select id="cat" class="grow" aria-label="Categorie"><option value="">Alle categorieën</option>${CATS.map(c=>`<option ${c===state.cat?"selected":""}>${c}</option>`).join("")}</select>
+  <label class="chk"><input id="low" type="checkbox" ${state.low?"checked":""}>Bij te bestellen</label></div><div id="list"></div>`;
+  const box=$("#list");
+  if(!prods.length)box.innerHTML=`<div class="empty"><h2>Nog geen artikels</h2><p class="muted small">${beheer()?"Voeg je eerste artikel toe, of lees je lijst in via Meer.":"Er staan nog geen artikels in de app."}</p></div>`;
+  else if(!list.length)box.innerHTML=`<div class="empty"><p class="muted">Niets gevonden voor deze zoekopdracht.</p></div>`;
+  else box.innerHTML=`<div class="shelf">${list.map(p=>{const s=op(p.id);return `<button class="item" data-id="${p.id}">
+    <span class="name">${foto(p,"thumb")}${esc(p.naam)} ${p.voorbeeld?'<span class="chip ex">voorbeeld</span>':""} ${s.qty<0?'<span class="chip bad">negatief</span>':isLow(p)?`<span class="chip">${p.besteldOp?"besteld":"bijbestellen"}</span>`:""}</span>
+    <span class="qty">${geboekt(p)&&!beheer()?"vrij":`${num(s.qty)} ${esc(p.eenheid)}`}</span>
+    <span class="meta">${esc(p.locatie||p.categorie)}</span><span class="val">${beheer()?eur(Stock.value(s)):""}</span></button>`}).join("")}</div>`;
+  $("#search").oninput=e=>{state.q=e.target.value;const c=e.target.selectionStart;viewStock();const i=$("#search");i.focus();i.setSelectionRange(c,c)};
+  $("#cat").onchange=e=>{state.cat=e.target.value;viewStock()};
+  $("#low").onchange=e=>{state.low=e.target.checked;viewStock()};
+  if($("#add"))$("#add").onclick=()=>productForm();
+  if($("#endPreview"))$("#endPreview").onclick=()=>{state.preview=false;render()};
+  box.querySelectorAll(".item").forEach(b=>b.onclick=()=>productSheet(b.dataset.id));
+  bindExamples();
+}
+
+/* ---------- Scan ---------- */
+function viewScan(){
+  $("#view").innerHTML=`<div class="tile" style="display:grid;gap:10px"><h2>Label of badge scannen</h2>
+  <p class="muted small">Richt de camera op het label. Na elk artikel kan je meteen het volgende scannen.</p>
+  <button class="btn primary" id="livescan">Camera starten</button><button class="btn" id="snap">Foto van label nemen</button></div>
+  <p class="small muted">Sneller op je gsm: richt je gewone camera op het label en tik op de link.</p>
+  <div id="scanMsg"></div>
+  <label>Of zoek het artikel<input id="manual" type="search" placeholder="Naam of artikelnr"></label><div id="manualList"></div>`;
+  $("#snap").onclick=()=>{$("#photo").value="";$("#photo").click()};
+  $("#livescan").onclick=startLive;
+  $("#manual").oninput=e=>{const q=e.target.value.toLowerCase();
+    const l=q?active().filter(p=>(p.naam+" "+(p.artikelnr||"")).toLowerCase().includes(q)).sort(byName).slice(0,8):[];
+    $("#manualList").innerHTML=l.length?`<div class="shelf">${l.map(p=>`<button class="item" data-id="${p.id}"><span class="name">${esc(p.naam)}</span><span class="qty">${num(op(p.id).qty)} ${esc(p.eenheid)}</span></button>`).join("")}</div>`:"";
+    $("#manualList").querySelectorAll(".item").forEach(b=>b.onclick=()=>productSheet(b.dataset.id))};
+}
+let liveStream=null;
+function stopLive(){if(liveStream){liveStream.getTracks().forEach(t=>t.stop());liveStream=null}$("#live").hidden=true}
+async function startLive(){
+  if(!window.jsQR)return toast("De scanner kon niet laden. Gebruik een foto.");
+  try{liveStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false})}catch{return toast("Geef de app toegang tot de camera, of gebruik een foto.")}
+  const v=$("#cam");v.srcObject=liveStream;$("#live").hidden=false;await v.play();
+  const c=document.createElement("canvas"),g=c.getContext("2d",{willReadFrequently:true});
+  const tik=()=>{
+    if(!liveStream)return;
+    if(v.videoWidth){const r=Math.min(1,800/v.videoWidth);c.width=v.videoWidth*r;c.height=v.videoHeight*r;g.drawImage(v,0,0,c.width,c.height);
+      const q=jsQR(g.getImageData(0,0,c.width,c.height).data,c.width,c.height);
+      if(q&&/#[pb]-/.test(q.data)){stopLive();if(navigator.vibrate)navigator.vibrate(80);const f=code(q.data);if(f)toast(f);return}}
+    setTimeout(()=>requestAnimationFrame(tik),150);
+  };tik();
+}
+$("#liveStop").onclick=stopLive;
+function code(text){
+  const b=/#b-(t[a-z0-9]+)-([a-z0-9]+)/.exec(text);
+  if(b){const t=state.ploegen.find(x=>x.id===b[1]),n=t?.leden?.find(x=>Stock.fnv(x)===b[2]);
+    if(!n)return "Deze badge hoort bij iemand die niet meer in een ploeg staat.";
+    onthoud({ploeg:t.id,persoon:n,badge:true});toast(`Je boekt nu als ${n}`);render();return ""}
+  const m=/#p-([a-z0-9]+)/.exec(text);
+  if(!m)return "Geen label herkend. Neem de foto van dichterbij, recht voor het label, en met goed licht.";
+  if(!state.products.some(x=>x.id==="p"+m[1]))return "Dit label hoort bij een artikel dat niet meer bestaat.";
+  productSheet("p"+m[1]);return "";
+}
+$("#photo").addEventListener("change",async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const msg=t=>{const m=$("#scanMsg");if(m)m.innerHTML=t?`<div class="notice err">${esc(t)}</div>`:""};
+  try{
+    if(!window.jsQR)throw 0;
+    const bmp=await createImageBitmap(f),r=Math.min(1,1600/Math.max(bmp.width,bmp.height));
+    const c=document.createElement("canvas");c.width=bmp.width*r;c.height=bmp.height*r;
+    const g=c.getContext("2d",{willReadFrequently:true});g.drawImage(bmp,0,0,c.width,c.height);
+    const d=g.getImageData(0,0,c.width,c.height),q=jsQR(d.data,c.width,c.height);
+    msg(q?code(q.data):"Geen label herkend. Neem de foto van dichterbij, recht voor het label, en met goed licht.");
+  }catch{msg("De foto kon niet gelezen worden. Probeer opnieuw of zoek het artikel hieronder.")}
+});
+
+/* ---------- Sheets ---------- */
+function openSheet(html){$("#sheetBox").innerHTML=html;$("#sheet").hidden=false;$("#cartBar").hidden=true}
+function closeSheet(){$("#sheet").hidden=true;state.openId=null;if(location.hash)try{history.replaceState(null,"",location.pathname+location.search)}catch{}renderHead()}
+$("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
+$("#cartBtn").onclick=()=>cartSheet();
+const plaatsSel=(id,sel,label)=>`<label>${label}<select id="${id}">${plaatsen().map(x=>`<option value="${x.id}" ${x.id===sel?"selected":""}>${esc(x.naam)}</option>`).join("")}</select></label>`;
+
+let draft={type:"uit"};
+function productSheet(id){
+  const p=state.products.find(x=>x.id===id);if(!p)return;
+  if(state.openId!==id||$("#sheet").hidden)draft={type:"uit"};
+  state.openId=id;
+  const s=op(id),adm=beheer(),C=geboekt(p);
+  const types=adm?["uit","in","retour","telling","verplaats"]:["uit","retour","verplaats"];
+  if(!types.includes(draft.type))draft.type="uit";
+  const voorstel=Stock.minimumVoorstel(verbruik[id],p.levertijd);
+  const hist=state.movements.filter(m=>m.productId===id&&m.type!=="storno").sort((a,b)=>a.at<b.at?1:-1).slice(0,8);
+  const tag=t=>t==="uit"?"−":t==="in"||t==="retour"?"+":t==="telling"?"=":"";
+  openSheet(`<div class="row"><h2 class="grow">${esc(p.naam)}</h2><button class="btn" id="close">Sluiten</button></div>
+  ${p.fotoId?`<img class="big" src="${esc(fotoUrl(p.fotoId))}" alt="">`:""}
+  <div class="tiles"><div class="tile"><span class="small muted">Stock</span><b>${C&&!adm?"vrij":`${num(s.qty)} ${esc(p.eenheid)}`}</b></div>${adm?`<div class="tile"><span class="small muted">Waarde</span><b>${eur(Stock.value(s))}</b></div>`:`<div class="tile"><span class="small muted">Rek</span><b>${esc(p.locatie||"Onbekend")}</b></div>`}</div>
+  ${adm?`<p class="small muted">Klasse ${esc(p.klasse||"B")} · gemiddelde prijs ${eur(s.avg)} · ${esc(p.locatie||"geen locatie")}${p.leverancier?" · "+esc(p.leverancier):""}${p.minimum?` · minimum ${num(p.minimum)}`:""}</p>`:""}
+  <p class="small muted">${plaatsen().filter(x=>s.pl[x.id]).map(x=>`${esc(x.naam)}: ${num(s.pl[x.id])}`).join(" · ")}</p>
+  ${adm&&voorstel&&voorstel!==Number(p.minimum)?`<div class="notice row"><span class="grow">Verbruik 90 dagen: ${num(verbruik[id])} ${esc(p.eenheid)}. Voorgesteld minimum: ${voorstel}.</span><button class="btn" id="takeMin">Overnemen</button></div>`:""}
+  ${C?`<button class="btn primary" id="meld" ${gemeld(p)?"disabled":""}>${gemeld(p)?"Al gemeld als bijna op":"Meld: bijna op"}</button>`:""}
+  ${C&&!adm?"":`<div class="seg" role="group" aria-label="Soort boeking">${types.map(t=>`<button data-t="${t}" aria-pressed="${draft.type===t}">${t==="uit"?"Uit":TYPE[t]}</button>`).join("")}</div>
+  <form id="mv" class="grid2" novalidate>
+    <label>${draft.type==="telling"?"Geteld aantal":"Aantal"}<input id="mv-qty" inputmode="decimal" autocomplete="off" ${draft.type==="uit"?'value="1"':""}></label>
+    ${draft.type==="in"?`<label>Prijs per ${esc(p.eenheid)} (€, excl. btw)<input id="mv-price" inputmode="decimal" autocomplete="off" value="${s.last?String(s.last).replace(".",","):""}"></label>${plaatsSel("mv-pl",Stock.MAG,"Naar")}`:""}
+    ${draft.type==="retour"?plaatsSel("mv-pl",Stock.MAG,"Terug naar")+`<label>Werf<input id="mv-werf" list="werven" autocomplete="off"></label>`:""}
+    ${draft.type==="telling"?plaatsSel("mv-pl",Stock.MAG,"Waar")+`<label>Reden bij verschil<select id="mv-reden"><option value="">Kies reden</option>${REDENEN.map(r=>`<option>${r}</option>`).join("")}</select></label>`:""}
+    ${draft.type==="verplaats"?plaatsSel("mv-van",Stock.MAG,"Van")+plaatsSel("mv-naar",plaatsen()[1]?.id||Stock.MAG,"Naar"):""}
+    <datalist id="werven">${werfNamen().map(w=>`<option value="${esc(w)}">`).join("")}</datalist>
+    <div id="mv-err" class="notice err" style="grid-column:1/-1" hidden></div>
+    <button class="btn primary" style="grid-column:1/-1">${draft.type==="uit"?"Leg in mandje":draft.type==="in"?"Boek in":draft.type==="retour"?"Boek retour":draft.type==="telling"?"Telling opslaan":"Verplaats"}</button>
+  </form>`}
+  <h3>Laatste bewegingen</h3>
+  ${hist.length?`<div class="scroll"><table><tbody>${hist.map(m=>`<tr ${cur.undone.has(m.id)?'style="text-decoration:line-through;opacity:.6"':""}><td>${fmtDate(m.at)}</td><td>${TYPE[m.type]}${m.werf?" · "+esc(m.werf):""}${m.ploeg?" · "+esc(m.ploeg):""}${m.persoon?" · "+esc(m.persoon):""}${m.reden?" · "+esc(m.reden):""}${m.note?" · "+esc(m.note):""}<br><span class="muted" data-who="${esc(m.by||"")}"></span></td><td class="n">${tag(m.type)}${m.type==="melding"?"":num(m.qty)}${magHerstel(m)?`<br><button class="link" data-undo="${m.id}">Ongedaan maken</button>`:""}</td></tr>`).join("")}</tbody></table></div>`:`<p class="small muted">Nog geen bewegingen.</p>`}
+  ${adm?`<button class="btn" id="edit">Artikel wijzigen</button>`:""}`);
+  $("#close").onclick=closeSheet;if($("#edit"))$("#edit").onclick=()=>productForm(p);
+  if($("#takeMin"))$("#takeMin").onclick=async()=>{try{await state.db.doc("products/"+p.id).update({minimum:voorstel});toast("Minimum aangepast")}catch(e){toast(writeError(e))}};
+  if($("#meld"))$("#meld").onclick=async()=>{try{await state.db.collection("movements").doc(newId("m")).set({productId:p.id,type:"melding",qty:0,at:nowIso(),by:state.uid||""});toast("Gemeld: komt op de bestellijst");closeSheet()}catch(e){toast(writeError(e))}};
+  $$(".seg button").forEach(b=>b.onclick=()=>{draft.type=b.dataset.t;productSheet(id)});
+  if($("#mv"))$("#mv").onsubmit=e=>{e.preventDefault();book(p)};
+  $$("[data-undo]").forEach(b=>b.onclick=()=>{if(b.dataset.sure){herstel(b.dataset.undo)}else{b.dataset.sure=1;b.textContent="Zeker? Tik opnieuw"}});
+  fillNames();
+}
+function magHerstel(m){
+  if(cur.undone.has(m.id)||m.type==="melding")return false;
+  return beheer()||(m.by&&m.by===state.uid&&m.at.slice(0,10)===nowIso().slice(0,10));
+}
+async function herstel(id){
+  try{await state.db.collection("movements").doc(newId("m")).set({type:"storno",herstelt:id,productId:state.movements.find(m=>m.id===id)?.productId||"",qty:0,at:nowIso(),by:state.uid||""});toast("Boeking ongedaan gemaakt");closeSheet()}catch(e){toast(writeError(e))}
+}
+const werfNamen=()=>[...new Set([...state.werven.map(w=>w.naam),...state.movements.map(m=>m.werf).filter(Boolean)])].slice(-40);
+async function fillNames(){
+  if(!state.user?.profiles)return;
+  const n=$$("[data-who]").filter(x=>x.dataset.who);if(!n.length)return;
+  try{const ps=await state.user.profiles([...new Set(n.map(x=>x.dataset.who))]);n.forEach(x=>x.textContent=ps[x.dataset.who]?.name||"")}catch{}
+}
+async function book(p){
+  const err=t=>{const e=$("#mv-err");e.textContent=t;e.hidden=false};
+  const q=dec($("#mv-qty").value),t=draft.type;
+  if(!(q>=0)||(t!=="telling"&&q===0))return err("Vul een geldig aantal in.");
+  if(t==="uit"){addCart(p.id,q);toast(`In mandje: ${num(q)} ${p.eenheid} ${p.naam}`);closeSheet();if(state.view==="scan"){render();startLive()}return}
+  const m={productId:p.id,type:t,qty:q,at:nowIso(),by:state.uid||""};
+  let pr=null;
+  if(t==="in"){pr=dec($("#mv-price").value);if(!(pr>=0))return err("Vul de aankoopprijs in, zodat de stockwaarde klopt.");m.plaats=$("#mv-pl").value}
+  if(t==="retour"){m.plaats=$("#mv-pl").value;m.werf=$("#mv-werf").value.trim();const g=geheugen();if(g.ploeg){m.ploegId=g.ploeg;m.ploeg=state.ploegen.find(x=>x.id===g.ploeg)?.naam||"";m.persoon=g.persoon||""}}
+  if(t==="telling"){m.plaats=$("#mv-pl").value;if(q!==opPlaats(p.id,m.plaats)){m.reden=$("#mv-reden").value;if(!m.reden)return err("Kies een reden voor het verschil.")}}
+  if(t==="verplaats"){m.van=$("#mv-van").value;m.naar=$("#mv-naar").value;if(m.van===m.naar)return err("Kies twee verschillende plaatsen.");if(q>opPlaats(p.id,m.van))return err(`Daar staat maar ${num(opPlaats(p.id,m.van))} ${p.eenheid}.`)}
+  try{
+    const mid=newId("m");
+    if(pr!=null)await state.db.doc("prijzen/"+mid).set({price:pr});
+    await state.db.collection("movements").doc(mid).set(m);
+    if(t==="in"&&p.besteldOp)await state.db.doc("products/"+p.id).update({besteldOp:null,besteldAantal:null});
+    toast(`${TYPE[t]} geboekt: ${num(q)} ${p.eenheid} ${p.naam}`);closeSheet();
+  }catch(e){err(writeError(e))}
+}
+
+/* ---------- Mandje ---------- */
+function addCart(id,q){const l=state.cart.find(x=>x.id===id);l?l.qty+=q:state.cart.push({id,qty:q})}
+function cartSheet(){
+  const g=geheugen(),m=state.mand;
+  m.ploeg=m.ploeg??(state.ploegen.some(x=>x.id===g.ploeg)?g.ploeg:"");m.persoon=m.persoon??(g.persoon||"");m.van=m.van||Stock.MAG;m.werf=m.werf||"";
+  const opts=[...state.ploegen].sort(byName),t=state.ploegen.find(x=>x.id===m.ploeg);
+  openSheet(`<div class="row"><h2 class="grow">Mandje</h2><button class="btn" id="close">Verder scannen</button></div>
+  <div class="shelf">${state.cart.map(l=>{const p=state.products.find(x=>x.id===l.id);return `<div class="item" style="cursor:default;grid-template-columns:minmax(0,1fr) 84px 44px"><span class="name">${esc(p?.naam)}<br><span class="meta">${num(opPlaats(l.id,m.van))} ${esc(p?.eenheid)} op deze plaats</span></span><input aria-label="Aantal" class="cq" data-id="${l.id}" inputmode="decimal" value="${num(l.qty)}"><button class="btn" data-del="${l.id}" aria-label="Verwijder">×</button></div>`}).join("")}</div>
+  ${state.pakketten.length?`<label>Werfpakket toevoegen<select id="pak"><option value="">Kies pakket</option>${state.pakketten.map(x=>`<option value="${x.id}">${esc(x.naam)}</option>`).join("")}</select></label>`:""}
+  <div class="grid2">${plaatsSel("c-van",m.van,"Uit")}
+  <label>Werf<input id="c-werf" list="wl" value="${esc(m.werf)}" autocomplete="off"></label><datalist id="wl">${werfNamen().map(w=>`<option value="${esc(w)}">`).join("")}</datalist>
+  ${opts.length?`<label>Ploeg<select id="c-ploeg" ${g.badge?"disabled":""}><option value="">Kies ploeg</option>${opts.map(x=>`<option value="${x.id}" ${x.id===m.ploeg?"selected":""}>${esc(x.naam)}</option>`).join("")}</select></label>
+  <label>Persoon<select id="c-pers" ${g.badge?"disabled":""}><option value="">Kies persoon</option>${(t?.leden||[]).map(n=>`<option ${n===m.persoon?"selected":""}>${esc(n)}</option>`).join("")}</select></label>`:""}</div>
+  ${g.badge?`<p class="small muted">Geboekt met de badge van ${esc(g.persoon)}. <button class="link" id="clearBadge">Afmelden</button></p>`:""}
+  <div id="c-err" class="notice err" hidden></div>
+  <button class="btn primary" id="boek">Boek ${state.cart.length} ${state.cart.length===1?"artikel":"artikels"} uit</button>
+  <button class="btn" id="leeg">Mandje leegmaken</button>`);
+  $("#close").onclick=closeSheet;
+  const keep=()=>{m.van=$("#c-van").value;m.werf=$("#c-werf").value;if($("#c-ploeg"))m.ploeg=$("#c-ploeg").value;if($("#c-pers"))m.persoon=$("#c-pers").value;$$(".cq").forEach(i=>{const v=dec(i.value),l=state.cart.find(x=>x.id===i.dataset.id);if(l&&v>=0)l.qty=v})};
+  $("#c-van").onchange=()=>{keep();cartSheet()};
+  if($("#c-ploeg")&&!g.badge)$("#c-ploeg").onchange=()=>{keep();m.persoon="";cartSheet()};
+  if($("#pak"))$("#pak").onchange=e=>{keep();const k=state.pakketten.find(x=>x.id===e.target.value);(k?.lijnen||[]).forEach(l=>{if(state.products.some(p=>p.id===l.productId))addCart(l.productId,l.qty)});cartSheet()};
+  $$("[data-del]").forEach(b=>b.onclick=()=>{keep();state.cart=state.cart.filter(x=>x.id!==b.dataset.del);state.cart.length?cartSheet():closeSheet()});
+  $("#leeg").onclick=()=>{state.cart=[];closeSheet()};
+  if($("#clearBadge"))$("#clearBadge").onclick=()=>{onthoud({});m.ploeg="";m.persoon="";cartSheet();renderHead()};
+  $("#boek").onclick=async()=>{
+    keep();const err=t=>{const e=$("#c-err");e.textContent=t;e.hidden=false};
+    if(opts.length&&!m.ploeg)return err("Kies de ploeg die het materiaal neemt.");
+    for(const l of state.cart){const p=state.products.find(x=>x.id===l.id);
+      if(!(l.qty>0))return err(`Vul een geldig aantal in voor ${p?.naam}.`);
+      if(l.qty>opPlaats(l.id,m.van))return err(`Op ${plaatsNaam(m.van)} staat maar ${num(opPlaats(l.id,m.van))} ${p?.eenheid} ${p?.naam}. Pas het aantal aan${beheer()?" of doe een telling":" of meld het aan de coördinator"}.`)}
+    const b=$("#boek");b.disabled=true;
+    const at=nowIso(),naam=state.ploegen.find(x=>x.id===m.ploeg)?.naam||"";
+    try{
+      for(const l of [...state.cart]){
+        await state.db.collection("movements").doc(newId("m")).set({productId:l.id,type:"uit",qty:l.qty,van:m.van,werf:m.werf.trim(),ploegId:m.ploeg||"",ploeg:naam,persoon:m.persoon||"",at,by:state.uid||""});
+        state.cart=state.cart.filter(x=>x!==l);
+      }
+      onthoud({...geheugen(),ploeg:m.ploeg,persoon:m.persoon});state.mand={};toast("Materiaal uitgeboekt");closeSheet();
+    }catch(e){b.disabled=false;err(writeError(e))}
+  };
+}
+
+/* ---------- Bestellen ---------- */
+function bestelAantal(p){
+  if(state.orderQty[p.id]!=null)return state.orderQty[p.id];
+  const doel=Math.max(Number(p.doelstock)||0,Number(p.minimum)||0);
+  const a=Math.ceil(Math.max(doel-op(p.id).qty,0)*1000)/1000;
+  return a||1;
+}
+function bestelTekst(lev,l){
+  const r=l.map(p=>`- ${num(bestelAantal(p))} ${p.eenheid} ${p.naam}${p.artikelnr?` (art. ${p.artikelnr})`:""}`);
+  return ["Bestelling Ve.Ra+",...(lev==="Geen leverancier"?[]:[`Leverancier: ${lev}`]),"",...r].join("\n");
+}
+function viewBestellen(){
+  const open=active().filter(p=>isLow(p)&&!p.besteldOp).sort(byName),lopend=active().filter(p=>p.besteldOp).sort(byName);
+  const gr={};open.forEach(p=>(gr[p.leverancier||"Geen leverancier"]=gr[p.leverancier||"Geen leverancier"]||[]).push(p));
+  const namen=Object.keys(gr).sort((a,b)=>a==="Geen leverancier"?1:b==="Geen leverancier"?-1:a.localeCompare(b,"nl"));
+  $("#view").innerHTML=`${examplesBanner()}<h2>Bijbestellen</h2>
+  ${namen.length?namen.map((lev,i)=>{const l=gr[lev],tot=l.reduce((a,p)=>a+bestelAantal(p)*op(p.id).last,0);
+    return `<section class="tile" style="display:grid;gap:10px"><div class="row"><h3 class="grow">${esc(lev)}</h3><span class="small muted">Geschat ${eur(tot)} excl. btw</span></div>
+    ${l.map(p=>`<div class="row"><div class="grow"><div class="name">${esc(p.naam)} ${gemeld(p)?'<span class="chip">gemeld</span>':""}</div><div class="meta">${num(op(p.id).qty)} in stock, minimum ${num(p.minimum)}</div></div><label style="flex:0 0 96px">Aantal ${esc(p.eenheid)}<input id="oq-${p.id}" data-id="${p.id}" class="oq" inputmode="decimal" autocomplete="off" value="${num(bestelAantal(p))}"></label></div>`).join("")}
+    <div class="row"><button class="btn grow" data-copy="${i}">Kopieer bestelling</button><button class="btn primary grow" data-mark="${i}">Markeer als besteld</button></div><div id="copy-${i}"></div></section>`}).join(""):`<div class="empty"><h2>Niets bij te bestellen</h2><p class="muted small">Artikels verschijnen hier zodra ze onder hun minimum zitten of als bijna op gemeld zijn.</p></div>`}
+  ${lopend.length?`<div class="row"><h2 class="grow">Besteld, nog niet geleverd</h2><button class="btn primary" id="lever">Levering inboeken</button></div><div class="shelf">${lopend.map(p=>`<div class="item" style="cursor:default"><span class="name">${esc(p.naam)}</span><button class="btn" data-cancel="${p.id}" style="grid-row:span 2;align-self:center">Annuleren</button><span class="meta">${p.besteldAantal?num(p.besteldAantal)+" "+esc(p.eenheid)+", ":""}besteld op ${fmtDate(p.besteldOp)}</span></div>`).join("")}</div>`:""}`;
+  bindExamples();
+  $$(".oq").forEach(i=>i.onchange=()=>{const v=dec(i.value);if(v>=0)state.orderQty[i.dataset.id]=v;viewBestellen()});
+  $$("[data-copy]").forEach(b=>b.onclick=()=>{const i=b.dataset.copy,t=bestelTekst(namen[i],gr[namen[i]]);
+    const toon=()=>{const c=$("#copy-"+i);c.innerHTML=`<textarea rows="6" aria-label="Tekst van de bestelling" readonly>${esc(t)}</textarea>`;c.firstChild.select()};
+    if(!navigator.clipboard?.writeText)return toon();
+    navigator.clipboard.writeText(t).then(()=>toast("Bestelling gekopieerd. Plak ze in je mail of bericht."),toon)});
+  $$("[data-mark]").forEach(b=>b.onclick=async()=>{b.disabled=true;
+    try{for(const p of gr[namen[b.dataset.mark]]){await state.db.doc("products/"+p.id).update({besteldOp:nowIso(),besteldAantal:bestelAantal(p)});delete state.orderQty[p.id]}toast("Gemarkeerd als besteld")}catch(e){b.disabled=false;toast(writeError(e))}});
+  $$("[data-cancel]").forEach(b=>b.onclick=async()=>{try{await state.db.doc("products/"+b.dataset.cancel).update({besteldOp:null,besteldAantal:null})}catch(e){toast(writeError(e))}});
+  if($("#lever"))$("#lever").onclick=()=>leverSheet(lopend);
+}
+function leverSheet(l){
+  openSheet(`<div class="row"><h2 class="grow">Levering inboeken</h2><button class="btn" id="close">Sluiten</button></div>
+  <p class="small muted">Laat het aantal leeg voor wat nog niet geleverd is. Prijzen zijn per eenheid, excl. btw.</p>
+  ${l.map(p=>`<div class="tile" style="display:grid;gap:8px"><div class="name">${esc(p.naam)}</div><div class="grid2"><label>Aantal ${esc(p.eenheid)}<input class="lq" id="lq-${p.id}" data-id="${p.id}" inputmode="decimal" autocomplete="off" value="${p.besteldAantal?num(p.besteldAantal):""}"></label><label>Prijs<input id="lp-${p.id}" inputmode="decimal" autocomplete="off" value="${op(p.id).last?String(op(p.id).last).replace(".",","):""}"></label></div></div>`).join("")}
+  <div id="l-err" class="notice err" hidden></div><button class="btn primary" id="lb">Levering boeken</button>`);
+  $("#close").onclick=closeSheet;
+  $("#lb").onclick=async()=>{
+    const err=t=>{const e=$("#l-err");e.textContent=t;e.hidden=false};
+    const rows=[];
+    for(const p of l){const qv=$("#lq-"+p.id).value;if(!qv.trim())continue;const q=dec(qv),pr=dec($("#lp-"+p.id).value);if(!(q>0))return err(`Geldig aantal nodig voor ${p.naam}.`);if(!(pr>=0))return err(`Vul de prijs in voor ${p.naam}.`);rows.push({p,q,pr})}
+    if(!rows.length)return err("Vul minstens één aantal in.");
+    $("#lb").disabled=true;
+    try{for(const r of rows){const mid=newId("m");await state.db.doc("prijzen/"+mid).set({price:r.pr});await state.db.collection("movements").doc(mid).set({productId:r.p.id,type:"in",qty:r.q,plaats:Stock.MAG,note:"Levering",at:nowIso(),by:state.uid||""});await state.db.doc("products/"+r.p.id).update({besteldOp:null,besteldAantal:null})}toast(`${rows.length} levering(en) ingeboekt`);closeSheet()}catch(e){$("#lb").disabled=false;err(writeError(e))}
+  };
+}
+
+/* ---------- Tellen ---------- */
+function viewTellen(){
+  const rekken=[...new Set(active().map(p=>p.locatie).filter(Boolean))].sort();
+  if(!state.telset)state.telset=Stock.telKeuze(active(),cur.stock,nowIso(),8).map(p=>p.id);
+  const l=(state.telRek?active().filter(p=>p.locatie===state.telRek).sort(byName):state.telset.map(id=>state.products.find(p=>p.id===id)).filter(Boolean));
+  $("#view").innerHTML=`${examplesBanner()}<h2>Tellen</h2><p class="muted small">${state.telRek?"Tel het hele rek.":"Deze week 8 artikels: de dure en langst niet getelde eerst."} Laat leeg wat je niet telde.</p>
+  <div class="grid2">${plaatsSel("t-pl",state.telPlaats,"Waar tel je")}<label>Rek<select id="t-rek"><option value="">Weekkeuze</option>${rekken.map(r=>`<option ${r===state.telRek?"selected":""}>${esc(r)}</option>`).join("")}</select></label></div>
+  ${l.length?l.map(p=>`<div class="tile" style="display:grid;gap:8px"><div class="row"><span class="name grow">${esc(p.naam)}</span><span class="small muted">verwacht ${num(opPlaats(p.id,state.telPlaats))} ${esc(p.eenheid)}</span></div>
+  <div class="grid2"><label>Geteld<input class="tq" id="tq-${p.id}" data-id="${p.id}" inputmode="decimal" autocomplete="off"></label><label>Reden bij verschil<select id="tr-${p.id}"><option value="">Kies reden</option>${REDENEN.map(r=>`<option>${r}</option>`).join("")}</select></label></div></div>`).join("")+`<div id="t-err" class="notice err" hidden></div><button class="btn primary" id="tok">Tellingen opslaan</button>`:`<div class="empty"><p class="muted">Niets om te tellen.</p></div>`}`;
+  bindExamples();
+  $("#t-pl").onchange=e=>{state.telPlaats=e.target.value;viewTellen()};
+  $("#t-rek").onchange=e=>{state.telRek=e.target.value;viewTellen()};
+  if($("#tok"))$("#tok").onclick=async()=>{
+    const err=t=>{const e=$("#t-err");e.textContent=t;e.hidden=false};
+    const rows=[];
+    for(const p of l){const v=$("#tq-"+p.id).value;if(!v.trim())continue;const q=dec(v);if(!(q>=0))return err(`Geldig aantal nodig voor ${p.naam}.`);const rd=$("#tr-"+p.id).value;if(q!==opPlaats(p.id,state.telPlaats)&&!rd)return err(`Kies een reden voor het verschil bij ${p.naam}.`);rows.push({p,q,rd})}
+    if(!rows.length)return err("Vul minstens één telling in.");
+    try{for(const r of rows){const m={productId:r.p.id,type:"telling",qty:r.q,plaats:state.telPlaats,at:nowIso(),by:state.uid||""};if(r.rd)m.reden=r.rd;await state.db.collection("movements").doc(newId("m")).set(m)}state.telset=null;toast(`${rows.length} telling(en) opgeslagen`)}catch(e){err(writeError(e))}
+  };
+}
+
+/* ---------- Waarde ---------- */
+function perPloeg(maand){
+  const o={};
+  for(const m of state.movements){
+    if(!["uit","retour"].includes(m.type)||cur.undone.has(m.id)||!m.at.startsWith(maand))continue;
+    const k=m.ploeg||"Geen ploeg ingevuld",x=o[k]||(o[k]={c:0,n:0,mensen:{}}),c=cur.cost[m.id]||0;x.c+=c;x.n++;if(m.persoon)x.mensen[m.persoon]=(x.mensen[m.persoon]||0)+c;
+  }
+  return Object.entries(o).sort((a,b)=>b[1].c-a[1].c);
+}
+function perWerf(){
+  const o={};
+  for(const m of state.movements){if(!["uit","retour"].includes(m.type)||!m.werf||cur.undone.has(m.id))continue;const k=m.werf.trim(),x=o[k]||(o[k]={c:0,at:""});x.c+=cur.cost[m.id]||0;if(m.at>x.at)x.at=m.at}
+  state.werven.forEach(w=>{o[w.naam]=o[w.naam]||{c:0,at:""}});
+  return Object.entries(o).sort((a,b)=>a[1].at<b[1].at?1:-1).slice(0,15);
+}
+const maandNaam=d=>new Date(d+"T12:00:00").toLocaleDateString("nl-BE",{month:"long",year:"numeric"});
+function viewWaarde(){
+  if(!state.asOf)state.asOf=nowIso().slice(0,10);
+  const r=Stock.replay(metPrijs(),state.asOf+"T23:59:59.999Z"),prods=active().sort(byName);
+  const per=CATS.map(c=>({c,v:prods.filter(p=>p.categorie===c).reduce((a,p)=>a+Stock.value(r.stock[p.id]),0)})),tot=per.reduce((a,x)=>a+x.v,0);
+  const perPl=plaatsen().map(x=>({n:x.naam,v:prods.reduce((a,p)=>{const s=r.stock[p.id];return a+(s?Math.max(s.pl[x.id]||0,0)*s.avg:0)},0)})).filter(x=>x.v);
+  const rows=prods.filter(p=>(r.stock[p.id]?.qty||0)!==0),w=perWerf(),pp=perPloeg(state.asOf.slice(0,7));
+  const vr={};state.movements.forEach(m=>{if(m.type==="telling"&&m.reden&&!cur.undone.has(m.id)&&m.at.startsWith(state.asOf.slice(0,4))&&cur.diff[m.id])vr[m.reden]=(vr[m.reden]||0)+cur.diff[m.id]});
+  const grens=new Date(Date.now()-180*864e5).toISOString();
+  const stil=prods.filter(p=>{const s=op(p.id);return s.qty>0&&!(s.lastOut>grens)&&(s.lastIn||"")<grens}).sort((a,b)=>Stock.value(op(b.id))-Stock.value(op(a.id)));
+  const wb=n=>state.werven.find(x=>x.naam===n);
+  $("#view").innerHTML=`${examplesBanner()}
+  <div class="row"><label class="grow">Stand op datum<input id="asof" type="date" value="${state.asOf}"></label><button class="btn" id="csv" style="align-self:end">Bewaar als CSV</button></div>
+  <div class="tiles">${per.map(x=>`<div class="tile"><span class="small muted">${x.c}</span><b>${eur(x.v)}</b></div>`).join("")}</div>
+  <div class="notice">Totaal op ${fmtDate(state.asOf)}: <b>${eur(tot)}</b>. Voorlopig berekend met de gemiddelde aankoopprijs. Elke aankoopprijs blijft bewaard, dus de berekening kan wijzigen als de boekhouder iets anders vraagt.</div>
+  ${perPl.length>1?`<div class="tiles">${perPl.map(x=>`<div class="tile"><span class="small muted">${esc(x.n)}</span><b>${eur(x.v)}</b></div>`).join("")}</div>`:""}
+  <div class="scroll"><table><thead><tr><th>Artikel</th><th class="n">Stock</th><th class="n">Gem. prijs</th><th class="n">Waarde</th></tr></thead><tbody>
+  ${rows.map(p=>{const s=r.stock[p.id];return `<tr><td>${esc(p.naam)}</td><td class="n">${num(s.qty)} ${esc(p.eenheid)}</td><td class="n">${eur(s.avg)}</td><td class="n">${eur(Stock.value(s))}</td></tr>`}).join("")||`<tr><td colspan="4" class="muted">Geen stock op deze datum.</td></tr>`}</tbody></table></div>
+  <h2>Materiaal per ploeg, ${esc(maandNaam(state.asOf))}</h2>
+  ${pp.length?`<div class="scroll"><table><thead><tr><th>Ploeg of persoon</th><th class="n">Boekingen</th><th class="n">Materiaalkost</th></tr></thead><tbody>${pp.map(([k,o])=>`<tr><td><b>${esc(k)}</b></td><td class="n">${o.n}</td><td class="n">${eur(o.c)}</td></tr>`+Object.entries(o.mensen).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`<tr><td class="muted">${esc(n)}</td><td></td><td class="n muted">${eur(c)}</td></tr>`).join("")).join("")}</tbody></table></div>`:`<p class="muted small">Nog geen uitboekingen in deze maand.</p>`}
+  <div class="row"><h2 class="grow">Materiaal per werf</h2><button class="btn" id="nieuweWerf">Budget instellen</button></div>
+  ${w.length?`<div class="scroll"><table><thead><tr><th>Werf</th><th class="n">Budget</th><th class="n">Materiaal</th><th class="n">Verschil</th></tr></thead><tbody>${w.map(([k,o])=>{const b=wb(k)?.budget;return `<tr><td>${esc(k)}</td><td class="n">${b?eur(b):"–"}</td><td class="n">${eur(o.c)}</td><td class="n" ${b&&o.c>b?'style="color:var(--bad)"':""}>${b?eur(b-o.c):"–"}</td></tr>`}).join("")}</tbody></table></div>`:`<p class="muted small">Vul bij het uitboeken een werf in. Dan zie je hier wat elke werf aan materiaal kost.</p>`}
+  <h2>Telverschillen ${state.asOf.slice(0,4)}</h2>
+  ${Object.keys(vr).length?`<div class="scroll"><table><tbody>${Object.entries(vr).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="n">${eur(v)}</td></tr>`).join("")}</tbody></table></div>`:`<p class="muted small">Nog geen telverschillen geregistreerd.</p>`}
+  <h2>Geld dat stilligt</h2>
+  ${stil.length?`<div class="scroll"><table><thead><tr><th>Artikel, 6 maanden geen beweging</th><th class="n">Waarde</th></tr></thead><tbody>${stil.map(p=>`<tr><td>${esc(p.naam)}</td><td class="n">${eur(Stock.value(op(p.id)))}</td></tr>`).join("")}</tbody></table></div>`:`<p class="muted small">Geen artikels die al 6 maanden stilliggen.</p>`}`;
+  $("#asof").onchange=e=>{state.asOf=e.target.value||state.asOf;viewWaarde()};
+  $("#csv").onclick=()=>saveCsv(rows,r);$("#nieuweWerf").onclick=werfSheet;bindExamples();
+}
+function werfSheet(){
+  openSheet(`<div class="row"><h2 class="grow">Budget per werf</h2><button class="btn" id="close">Sluiten</button></div>
+  <p class="small muted">Vul het materiaalbudget uit je offerte in. Gebruik dezelfde werfnaam als bij het uitboeken.</p>
+  <label>Werf<input id="w-naam" list="wl2" autocomplete="off"></label><datalist id="wl2">${werfNamen().map(w=>`<option value="${esc(w)}">`).join("")}</datalist>
+  <label>Materiaalbudget (€, excl. btw)<input id="w-b" inputmode="decimal" autocomplete="off"></label><div id="w-err" class="notice err" hidden></div><button class="btn primary" id="w-ok">Budget opslaan</button>`);
+  $("#close").onclick=closeSheet;
+  $("#w-ok").onclick=async()=>{const err=t=>{const e=$("#w-err");e.textContent=t;e.hidden=false};const n=$("#w-naam").value.trim(),b=dec($("#w-b").value);if(!n)return err("Vul de werfnaam in.");if(!(b>=0))return err("Vul een geldig budget in.");
+    const id=state.werven.find(w=>w.naam===n)?.id||newId("w");try{await state.db.doc("werven/"+id).set({naam:n,budget:b});toast("Budget opgeslagen");closeSheet()}catch(e){err(writeError(e))}};
+}
+async function saveCsv(rows,r){
+  if(!state.downloads)return toast("Bewaren kan niet in deze weergave.");
+  const f=n=>Number(n).toFixed(4).replace(".",","),q=s=>'"'+String(s??"").replace(/"/g,'""')+'"';
+  const l=[["Artikel","Artikelnr","Categorie","Stock","Eenheid","Gemiddelde prijs","Waarde"].map(q).join(";")];
+  rows.forEach(p=>{const s=r.stock[p.id];l.push([q(p.naam),q(p.artikelnr),q(p.categorie),f(s.qty),q(p.eenheid),f(s.avg),f(Stock.value(s))].join(";"))});
+  try{await state.downloads.save({filename:`voorraad-${state.asOf}.csv`,data:"﻿"+l.join("\r\n")})}catch(e){if(e.code!=="declined")toast("Bewaren is niet gelukt.")}
+}
+
+/* ---------- Meer: labels, badges, ploegen, pakketten, import ---------- */
+function viewMeer(){
+  const prods=active().sort(byName),mensen=state.ploegen.flatMap(t=>(t.leden||[]).map(n=>({t,n,k:t.id+"|"+n})));
+  $("#view").innerHTML=`<h2>Beheer</h2><div class="row"><button class="btn grow" id="ploegen">Ploegen</button><button class="btn grow" id="pakk">Werfpakketten</button><button class="btn grow" id="imp">Artikels inlezen</button></div>
+  <div class="row"><button class="btn grow" id="users">Gebruikers</button><button class="btn grow" id="preview">Bekijk als plaatser</button></div>
+  <h2>QR-labels</h2><p class="muted small">A4-pdf met 24 labels per blad.</p>
+  ${prods.length?`<div class="row"><button class="btn" id="all">Alles kiezen</button><button class="btn primary grow" id="pdf" ${state.pick.size?"":"disabled"}>Bewaar ${state.pick.size} label(s) als pdf</button></div><div class="shelf" style="padding:6px 12px">${prods.map(p=>`<label class="chk" style="min-height:44px"><input type="checkbox" data-id="${p.id}" ${state.pick.has(p.id)?"checked":""}><span>${esc(p.naam)}</span></label>`).join("")}</div>`:`<p class="muted small">Voeg eerst artikels toe.</p>`}
+  <h2>Badges</h2>
+  ${mensen.length?`<button class="btn primary" id="bpdf" ${state.badgePick.size?"":"disabled"}>Bewaar ${state.badgePick.size} badge(s) als pdf</button><div class="shelf" style="padding:6px 12px">${mensen.map(x=>`<label class="chk" style="min-height:44px"><input type="checkbox" data-b="${esc(x.k)}" ${state.badgePick.has(x.k)?"checked":""}><span>${esc(x.n)} · ${esc(x.t.naam)}</span></label>`).join("")}</div>`:`<p class="muted small">Voeg eerst personen toe aan een ploeg.</p>`}`;
+  $("#ploegen").onclick=ploegenSheet;$("#pakk").onclick=pakketSheet;$("#imp").onclick=importSheet;$("#users").onclick=usersSheet;
+  $("#preview").onclick=()=>{state.preview=true;state.view="stock";render();scrollTo(0,0)};
+  $$('#view input[data-id]').forEach(i=>i.onchange=()=>{i.checked?state.pick.add(i.dataset.id):state.pick.delete(i.dataset.id);viewMeer()});
+  $$('#view input[data-b]').forEach(i=>i.onchange=()=>{i.checked?state.badgePick.add(i.dataset.b):state.badgePick.delete(i.dataset.b);viewMeer()});
+  if($("#all"))$("#all").onclick=()=>{state.pick=new Set(state.pick.size===prods.length?[]:prods.map(p=>p.id));viewMeer()};
+  if($("#pdf"))$("#pdf").onclick=()=>savePdf("voorraad-labels.pdf",prods.filter(p=>state.pick.has(p.id)).map(p=>({titel:p.naam,sub:[p.artikelnr,p.locatie,p.eenheid].filter(Boolean),url:`${APP_URL}#${p.id.replace(/^p/,"p-")}`})));
+  if($("#bpdf"))$("#bpdf").onclick=()=>savePdf("voorraad-badges.pdf",mensen.filter(x=>state.badgePick.has(x.k)).map(x=>({titel:x.n,sub:[x.t.naam,"Badge Ve.Ra+"],url:`${APP_URL}#b-${x.t.id}-${Stock.fnv(x.n)}`})));
+}
+async function usersSheet(){
+  openSheet(`<div class="row"><h2 class="grow">Gebruikers</h2><button class="btn" id="close">Sluiten</button></div><div id="ulist" class="muted small">Laden</div>
+  <h3>Nieuwe gebruiker</h3><form id="uf" class="grid2" novalidate><label>Naam<input id="u-n" autocomplete="off"></label><label>Code van minstens 6 tekens<input id="u-c" autocomplete="off"></label>
+  <label>Rol<select id="u-r"><option value="plaatser">Plaatser</option><option value="beheerder">Beheerder</option></select></label><button class="btn primary">Toevoegen</button></form><div id="u-err" class="notice err" hidden></div>
+  <button class="btn" id="logout">Afmelden op dit toestel</button>`);
+  $("#close").onclick=closeSheet;$("#logout").onclick=Beheer.afmelden;
+  const err=t=>{const e=$("#u-err");e.textContent=t;e.hidden=false};
+  try{const l=await Beheer.lijst();$("#ulist").innerHTML=`<div class="shelf">${l.map(u=>`<div class="item" style="cursor:default"><span class="name">${esc(u.naam)} ${u.actief?"":'<span class="chip bad">uit</span>'}</span>${u.user_id===Beheer.eigen().user_id?"<span></span>":`<button class="btn" data-a="${u.user_id}" data-v="${u.actief?0:1}">${u.actief?"Blokkeren":"Toelaten"}</button>`}<span class="meta">${esc(u.rol)}</span></div>`).join("")}</div>`;
+    $$("[data-a]").forEach(b=>b.onclick=async()=>{try{await Beheer.fn({actie:"actief",user_id:b.dataset.a,actief:b.dataset.v==="1"});usersSheet()}catch(x){err(x.message)}})}catch{err("De lijst kon niet geladen worden.")}
+  $("#uf").onsubmit=async e=>{e.preventDefault();const n=$("#u-n").value.trim(),c=$("#u-c").value;if(!n||c.length<6)return err("Vul een naam en een code van minstens 6 tekens in.");
+    try{await Beheer.fn({actie:"maak",naam:n,code:c,rol:$("#u-r").value});toast(`${n} kan nu aanmelden`);usersSheet()}catch(x){err(x.message)}};
+}
+async function savePdf(naam,items){
+  if(!state.downloads||!window.jspdf||!window.qrcode)return toast("Bewaren als pdf lukt niet in deze weergave.");
+  const d=new window.jspdf.jsPDF({unit:"mm",format:"a4"}),W=70,H=37,C=3,R=8;
+  items.forEach((it,i)=>{
+    if(i&&i%(C*R)===0)d.addPage();
+    const n=i%(C*R),x=(n%C)*W,y=.5+Math.floor(n/C)*H,q=qrcode(0,"M");q.addData(it.url);q.make();
+    const c=q.getModuleCount(),m=29/c;d.setFillColor(0,0,0);
+    for(let r=0;r<c;r++)for(let k=0;k<c;k++)if(q.isDark(r,k))d.rect(x+3+k*m,y+4+r*m,m+.02,m+.02,"F");
+    d.setDrawColor(210);d.rect(x+.5,y+.5,W-1,H-1);
+    d.setFont("helvetica","bold");d.setFontSize(10);d.text(d.splitTextToSize(it.titel,W-36).slice(0,4),x+34,y+9);
+    d.setFont("helvetica","normal");d.setFontSize(8);d.text(it.sub,x+34,y+27);
+  });
+  try{await state.downloads.save({filename:naam,data:d.output("blob")})}catch(e){if(e.code!=="declined")toast("Bewaren is niet gelukt.")}
+}
+function ploegenSheet(){
+  const l=[...state.ploegen].sort(byName);
+  openSheet(`<div class="row"><h2 class="grow">Ploegen</h2><button class="btn" id="close">Sluiten</button></div>
+  ${l.length?`<div class="shelf">${l.map(p=>`<button class="item" data-id="${p.id}"><span class="name">${esc(p.naam)}</span><span class="meta" style="grid-column:1/-1">${esc((p.leden||[]).join(", ")||"Nog geen personen")}</span></button>`).join("")}</div>`:`<p class="muted small">Voeg je ploegen toe. Ze verschijnen dan bij elke uitboeking en krijgen een wagen als stockplaats.</p>`}
+  <button class="btn primary" id="newP">Nieuwe ploeg</button>`);
+  $("#close").onclick=closeSheet;$("#newP").onclick=()=>ploegForm();
+  $$("#sheetBox .item").forEach(b=>b.onclick=()=>ploegForm(state.ploegen.find(p=>p.id===b.dataset.id)));
+}
+function ploegForm(p){
+  const isNew=!p;p=p||{naam:"",leden:[]};
+  openSheet(`<div class="row"><h2 class="grow">${isNew?"Nieuwe ploeg":"Ploeg wijzigen"}</h2><button class="btn" id="close">Terug</button></div>
+  <form id="plf" style="display:grid;gap:10px" novalidate><label>Naam ploeg<input id="pl-naam" value="${esc(p.naam)}" placeholder="Bv. Ploeg 1" autocomplete="off"></label>
+  <label>Personen, één per lijn<textarea id="pl-leden" rows="5">${esc((p.leden||[]).join("\n"))}</textarea></label><div id="pl-err" class="notice err" hidden></div>
+  <button class="btn primary">Ploeg opslaan</button>${isNew?"":`<button type="button" class="btn bad" id="pl-del">Ploeg verwijderen</button><p class="small muted">Oude boekingen behouden de naam van de ploeg. Verplaats eerst de stock uit de wagen.</p>`}</form>`);
+  $("#close").onclick=ploegenSheet;const err=t=>{const e=$("#pl-err");e.textContent=t;e.hidden=false};
+  if(!isNew)$("#pl-del").onclick=async()=>{if(active().some(a=>opPlaats(a.id,p.id)))return err("Er staat nog stock in deze wagen. Verplaats die eerst.");try{await state.db.doc("ploegen/"+p.id).delete();ploegenSheet()}catch(e){err(writeError(e))}};
+  $("#plf").onsubmit=async e=>{e.preventDefault();const naam=$("#pl-naam").value.trim();if(!naam)return err("Geef de ploeg een naam.");
+    const leden=$("#pl-leden").value.split("\n").map(x=>x.trim()).filter(Boolean);
+    try{await state.db.doc("ploegen/"+(p.id||newId("t"))).set({naam,leden});toast("Ploeg opgeslagen");ploegenSheet()}catch(x){err(writeError(x))}};
+}
+function pakketSheet(){
+  openSheet(`<div class="row"><h2 class="grow">Werfpakketten</h2><button class="btn" id="close">Sluiten</button></div>
+  ${state.pakketten.length?`<div class="shelf">${state.pakketten.map(p=>`<button class="item" data-id="${p.id}"><span class="name">${esc(p.naam)}</span><span class="meta" style="grid-column:1/-1">${(p.lijnen||[]).length} artikels</span></button>`).join("")}</div>`:`<p class="muted small">Een pakket is een vaste set materiaal, bijvoorbeeld voor een standaard raamvervanging. Bij het uitboeken voeg je het in één keer toe.</p>`}
+  <button class="btn primary" id="newK">Nieuw pakket</button>`);
+  $("#close").onclick=closeSheet;$("#newK").onclick=()=>pakketForm();
+  $$("#sheetBox .item").forEach(b=>b.onclick=()=>pakketForm(state.pakketten.find(p=>p.id===b.dataset.id)));
+}
+function pakketForm(k){
+  const isNew=!k;k=k||{naam:"",lijnen:[]};const q=id=>k.lijnen.find(l=>l.productId===id)?.qty??"";
+  openSheet(`<div class="row"><h2 class="grow">${isNew?"Nieuw pakket":"Pakket wijzigen"}</h2><button class="btn" id="close">Terug</button></div>
+  <label>Naam pakket<input id="k-naam" value="${esc(k.naam)}" placeholder="Bv. Standaard raam" autocomplete="off"></label>
+  <div class="shelf" style="padding:6px 12px">${active().sort(byName).map(p=>`<div class="row" style="padding:4px 0"><span class="grow">${esc(p.naam)}</span><input aria-label="Aantal ${esc(p.naam)}" class="kq" data-id="${p.id}" style="flex:0 0 80px" inputmode="decimal" value="${q(p.id)}"></div>`).join("")}</div>
+  <div id="k-err" class="notice err" hidden></div><button class="btn primary" id="k-ok">Pakket opslaan</button>${isNew?"":`<button class="btn bad" id="k-del">Pakket verwijderen</button>`}`);
+  $("#close").onclick=pakketSheet;const err=t=>{const e=$("#k-err");e.textContent=t;e.hidden=false};
+  if(!isNew)$("#k-del").onclick=async()=>{try{await state.db.doc("pakketten/"+k.id).delete();pakketSheet()}catch(e){err(writeError(e))}};
+  $("#k-ok").onclick=async()=>{const naam=$("#k-naam").value.trim();if(!naam)return err("Geef het pakket een naam.");
+    const lijnen=$$(".kq").map(i=>({productId:i.dataset.id,qty:dec(i.value)})).filter(l=>l.qty>0);if(!lijnen.length)return err("Vul minstens één aantal in.");
+    try{await state.db.doc("pakketten/"+(k.id||newId("k"))).set({naam,lijnen});toast("Pakket opgeslagen");pakketSheet()}catch(x){err(writeError(x))}};
+}
+const KOLOM=["Naam","Categorie","Eenheid","Artikelnr","Minimum","Locatie","Leverancier","Klasse","Beginstock","Prijs"];
+function parseCsv(t){
+  const sep=(t.split("\n")[0].match(/;/g)||[]).length>=(t.split("\n")[0].match(/,/g)||[]).length?";":",",rows=[];let r=[],c="",q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}
+    else if(ch==='"')q=true;else if(ch===sep){r.push(c);c=""}else if(ch==="\n"){r.push(c);rows.push(r);r=[];c=""}else if(ch!=="\r")c+=ch}
+  if(c||r.length){r.push(c);rows.push(r)}return rows.filter(x=>x.some(v=>String(v).trim()));
+}
+function naarArtikels(rows){
+  const h=rows[0].map(x=>String(x).trim().toLowerCase()),i=n=>h.indexOf(n.toLowerCase());
+  if(i("Naam")<0)throw new Error("kolom");
+  return rows.slice(1).map(r=>{const g=n=>i(n)<0?"":String(r[i(n)]??"").trim();const k=g("Klasse").toUpperCase();
+    return {naam:g("Naam"),categorie:CATS.find(c=>c.toLowerCase().startsWith(g("Categorie").toLowerCase().slice(0,5))&&g("Categorie"))||CATS[0],eenheid:g("Eenheid")||"stuk",artikelnr:g("Artikelnr"),minimum:dec(g("Minimum"))||0,locatie:g("Locatie"),leverancier:g("Leverancier"),klasse:["A","B","C"].includes(k)?k:"B",_q:dec(g("Beginstock"))||0,_p:dec(g("Prijs"))}}).filter(a=>a.naam);
+}
+function importSheet(){
+  openSheet(`<div class="row"><h2 class="grow">Artikels inlezen</h2><button class="btn" id="close">Sluiten</button></div>
+  <p class="small muted">Kies een Excel- of CSV-bestand met deze kolommen op de eerste rij: ${KOLOM.join(", ")}. Alleen Naam is verplicht.</p>
+  <label>Bestand<input id="i-file" type="file" accept=".xlsx,.xls,.csv"></label><div id="i-res"></div>`);
+  $("#close").onclick=closeSheet;
+  $("#i-file").onchange=async e=>{
+    const f=e.target.files[0],res=$("#i-res");if(!f)return;
+    try{
+      let rows;
+      if(/\.csv$/i.test(f.name))rows=parseCsv((await f.text()).replace(/^﻿/,""));
+      else{if(!window.XLSX)throw new Error("lib");const wb=XLSX.read(await f.arrayBuffer());rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:""})}
+      const a=naarArtikels(rows),namen=new Set(state.products.map(p=>p.naam.toLowerCase())),nw=a.filter(x=>!namen.has(x.naam.toLowerCase()));
+      const zonderPrijs=nw.filter(x=>x._q>0&&!(x._p>=0)).length;
+      res.innerHTML=`<div class="notice">${nw.length} nieuwe artikels gevonden, ${a.length-nw.length} staan er al in en worden overgeslagen.${zonderPrijs?` ${zonderPrijs} hebben stock maar geen prijs: die stock wordt niet ingeboekt.`:""}</div><button class="btn primary" id="i-ok" ${nw.length?"":"disabled"}>${nw.length} artikels toevoegen</button>`;
+      if(nw.length)$("#i-ok").onclick=async()=>{const b=$("#i-ok");b.disabled=true;
+        try{for(const x of nw){const id=newId("p"),{_q,_p,...body}=x;await state.db.doc("products/"+id).set({...body,doelstock:0,levertijd:7});
+          if(_q>0&&_p>=0){const mid=newId("m");await state.db.doc("prijzen/"+mid).set({price:_p});await state.db.collection("movements").doc(mid).set({productId:id,type:"in",qty:_q,note:"Beginstock",at:nowIso(),by:state.uid||""})}}
+          toast("Artikels toegevoegd");closeSheet()}catch(x){b.disabled=false;toast(writeError(x))}};
+    }catch(x){res.innerHTML=`<div class="notice err">${x.message==="kolom"?"De kolom Naam ontbreekt op de eerste rij.":x.message==="lib"?"Excel kan hier niet gelezen worden. Bewaar het bestand als CSV en probeer opnieuw.":"Dit bestand kon niet gelezen worden."}</div>`}
+  };
+}
+function productForm(p){
+  const isNew=!p;p=p||{naam:"",artikelnr:"",categorie:CATS[0],eenheid:"stuk",klasse:"B",locatie:"",leverancier:"",minimum:"",levertijd:7};
+  state.openId=null;let fotoId=p.fotoId||"";
+  openSheet(`<div class="row"><h2 class="grow">${isNew?"Nieuw artikel":"Artikel wijzigen"}</h2><button class="btn" id="close">Sluiten</button></div>
+  <form id="pf" style="display:grid;gap:10px" novalidate>
+  <label>Naam<input id="f-naam" value="${esc(p.naam)}" placeholder="Bv. schroef 5×60 inox" autocomplete="off"></label>
+  <div class="grid2"><label>Categorie<select id="f-cat">${CATS.map(c=>`<option ${c===p.categorie?"selected":""}>${c}</option>`).join("")}</select></label>
+  <label>Eenheid<select id="f-unit">${UNITS.map(u=>`<option ${u===p.eenheid?"selected":""}>${u}</option>`).join("")}</select></label></div>
+  <label>Klasse<select id="f-kl">${Object.entries(KLASSE).map(([k,v])=>`<option value="${k}" ${k===(p.klasse||"B")?"selected":""}>${v}</option>`).join("")}</select></label>
+  <div class="grid2"><label>Artikelnr<input id="f-nr" value="${esc(p.artikelnr)}" autocomplete="off"></label><label>Minimum<input id="f-min" inputmode="decimal" value="${esc(p.minimum)}" autocomplete="off"></label></div>
+  <div class="grid2"><label>Bijbestellen tot<input id="f-doel" inputmode="decimal" value="${esc(p.doelstock||"")}" autocomplete="off" placeholder="Leeg: tot minimum"></label><label>Levertijd (dagen)<input id="f-lev-d" inputmode="decimal" value="${esc(p.levertijd??7)}" autocomplete="off"></label></div>
+  <div class="grid2"><label>Rek of locatie<input id="f-loc" value="${esc(p.locatie)}" placeholder="Bv. Rek B2" autocomplete="off"></label><label>Leverancier<input id="f-lev" value="${esc(p.leverancier)}" autocomplete="off"></label></div>
+  ${state.assets?`<label>Foto<input id="f-foto" type="file" accept="image/*"></label>`:""}
+  ${isNew?`<div class="grid2"><label>Beginstock<input id="f-qty" inputmode="decimal" autocomplete="off"></label><label>Aankoopprijs per eenheid (€, excl. btw)<input id="f-price" inputmode="decimal" autocomplete="off"></label></div>`:""}
+  <div id="f-err" class="notice err" hidden></div><button class="btn primary">${isNew?"Artikel toevoegen":"Wijzigingen opslaan"}</button>
+  ${isNew?"":`<button type="button" class="btn bad" id="arch">Artikel verbergen</button>`}</form>`);
+  $("#close").onclick=closeSheet;const err=t=>{const e=$("#f-err");e.textContent=t;e.hidden=false};
+  if($("#f-foto"))$("#f-foto").onchange=async e=>{const f=e.target.files[0];if(!f)return;try{
+    const b=await createImageBitmap(f),r=Math.min(1,900/Math.max(b.width,b.height)),c=document.createElement("canvas");c.width=b.width*r;c.height=b.height*r;c.getContext("2d").drawImage(b,0,0,c.width,c.height);
+    const bl=await new Promise(o=>c.toBlob(o,"image/jpeg",.8));fotoId=(await state.assets.upload(bl)).id;toast("Foto klaar")}catch{err("De foto kon niet opgeladen worden.")}};
+  if(!isNew)$("#arch").onclick=async()=>{if(op(p.id).qty!==0)return err("Dit artikel heeft nog stock. Doe eerst een telling op 0.");try{await state.db.doc("products/"+p.id).update({archived:true});toast("Artikel verborgen");closeSheet()}catch(e){err(writeError(e))}};
+  $("#pf").onsubmit=async e=>{e.preventDefault();
+    const naam=$("#f-naam").value.trim();if(!naam)return err("Geef het artikel een naam.");
+    const n=(id)=>{const v=$(id).value.trim();return v===""?0:dec(v)},min=n("#f-min"),doel=n("#f-doel"),lev=n("#f-lev-d");
+    if(!(min>=0)||!(doel>=0)||!(lev>=0))return err("Minimum, bijbestellen tot en levertijd moeten getallen zijn.");
+    const body={naam,categorie:$("#f-cat").value,eenheid:$("#f-unit").value,klasse:$("#f-kl").value,artikelnr:$("#f-nr").value.trim(),minimum:min,doelstock:doel,levertijd:lev,locatie:$("#f-loc").value.trim(),leverancier:$("#f-lev").value.trim(),fotoId};
+    try{
+      if(isNew){
+        const qv=$("#f-qty").value.trim(),q=qv===""?0:dec(qv),pr=dec($("#f-price").value);
+        if(!(q>=0))return err("De beginstock moet een getal zijn.");
+        if(q>0&&!(pr>=0))return err("Vul de aankoopprijs in, zodat de stockwaarde klopt.");
+        const id=newId("p");await state.db.doc("products/"+id).set(body);
+        if(q>0){const mid=newId("m");await state.db.doc("prijzen/"+mid).set({price:pr});await state.db.collection("movements").doc(mid).set({productId:id,type:"in",qty:q,note:"Beginstock",at:nowIso(),by:state.uid||""})}
+        toast("Artikel toegevoegd");
+      }else{await state.db.doc("products/"+p.id).update(body);toast("Wijzigingen opgeslagen")}
+      closeSheet();
+    }catch(x){err(writeError(x))}
+  };
+}
+async function clearExamples(){
+  const ids=new Set(state.products.filter(p=>p.voorbeeld).map(p=>p.id));
+  try{
+    for(const m of state.movements.filter(m=>ids.has(m.productId))){await state.db.doc("movements/"+m.id).delete();if(state.prijzen[m.id]!=null)await state.db.doc("prijzen/"+m.id).delete()}
+    for(const id of ids)await state.db.doc("products/"+id).delete();
+    state.cart=state.cart.filter(c=>!ids.has(c.id));toast("Voorbeelden gewist");
+  }catch(e){toast(writeError(e))}
+}
+function route(){
+  const h=location.hash;
+  if(!state.loaded.p||!state.loaded.m)return;
+  if(/^#[pb]-/.test(h)){const f=code(h);if(f)toast(f)}
+}
+$$("nav button").forEach(b=>b.onclick=()=>{state.view=b.dataset.v;closeSheet();render();scrollTo(0,0)});
+window.addEventListener("hashchange",route);
+render();
+(async()=>{
+  const timer=setTimeout(()=>{if(!state.loaded.p){state.problem="De gegevens zijn nog niet bereikbaar. Controleer je verbinding.";render()}},10000);
+  const [db,user,downloads,assets]=await Promise.all([claude.use("db"),claude.use("user"),claude.use("downloads"),claude.use("assets")]);
+  Object.assign(state,{db,user,downloads,assets});
+  if(!db){clearTimeout(timer);state.problem="Meld je aan om de stock te zien.";render();return}
+  try{state.uid=await user?.id()}catch{}
+  try{state.isAdmin=await user?.canEdit()===true}catch{}
+  let routed=false;
+  const done=()=>{const open=!$("#sheet").hidden;render();if(open&&state.openId&&!(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)))productSheet(state.openId);if(!routed&&state.loaded.p&&state.loaded.m){routed=true;clearTimeout(timer);route()}};
+  const fail=()=>{state.problem="De verbinding met de gegevens is verbroken. Open de app opnieuw.";render()};
+  const col=(n,f)=>db.collection(n).onSnapshot(s=>{f(s.docs.map(d=>({id:d.id,...d.data()})));done()},fail);
+  if(state.isAdmin){col("prijzen",r=>{const o={};r.forEach(x=>o[x.id]=x.price);state.prijzen=o});col("werven",r=>state.werven=r)}
+  col("ploegen",r=>state.ploegen=r);col("pakketten",r=>state.pakketten=r);
+  col("products",r=>{state.products=r;state.loaded.p=true});
+  col("movements",r=>{state.movements=r;state.loaded.m=true});
+})();
+</script>
+<script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));</script>
+</body></html>
